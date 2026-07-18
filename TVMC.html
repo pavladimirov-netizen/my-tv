@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Моят ТВ Център</title>
+    <!-- Включваме стиловете за видео плеъра -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    
+    <!-- STREAMING_CHUNK: Дефиниране на стиловете за интерфейса -->
+    <style>
+        body, html {
+            background-color: #050811;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            ms-user-select: none;
+            user-select: none;
+        }
+
+        /* STREAMING_CHUNK: Стилизиране на логото и зареждащия екран (Splash Screen) */
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0b0f19;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999; /* Най-отгоре над всичко */
+            transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .splash-screen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        /* Неоново сияние за логото */
+        .splash-logo {
+            filter: drop-shadow(0 0 15px rgba(61, 220, 132, 0.6));
+            animation: pulse-logo 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-logo {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 15px rgba(61, 220, 132, 0.5)); }
+            50% { transform: scale(1.05); filter: drop-shadow(0 0 30px rgba(61, 220, 132, 0.9)); }
+        }
+
+        .splash-title {
+            color: #ffffff;
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-top: 25px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        .splash-subtitle {
+            color: #3ddc84;
+            font-size: 1.1rem;
+            margin-top: 5px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+
+        /* STREAMING_CHUNK: Индикатор за зареждане */
+        .spinner {
+            width: 45px;
+            height: 45px;
+            border: 3px solid rgba(61, 220, 132, 0.1);
+            border-radius: 50%;
+            border-top-color: #3ddc84;
+            animation: spin 1s ease-in-out infinite;
+            margin-top: 35px;
+            box-shadow: 0 0 15px rgba(61, 220, 132, 0.2);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* STREAMING_CHUNK: Основна структура на ТВ видео плеъра */
+        .player-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .video-js {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Невидима зона вляво за лесно отваряне при доближаване */
+        .menu-trigger-zone {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 60px;
+            height: 100%;
+            z-index: 999;
+            cursor: pointer;
+        }
+
+        /* STREAMING_CHUNK: Стилизиране на бутона за менюто */
+        .menu-btn {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #3ddc84; /* Android зелено */
+            border: 2px solid #3ddc84;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: bold;
+            z-index: 10000; /* ВИНАГИ най-отгоре */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .menu-btn:hover, .menu-btn:focus {
+            background: #3ddc84;
+            color: #0f172a;
+            box-shadow: 0 0 20px rgba(61, 220, 132, 0.6);
+            transform: scale(1.08);
+            outline: none;
+        }
+
+        /* STREAMING_CHUNK: Странично меню (Sidebar) */
+        .sidebar {
+            position: absolute;
+            top: 0;
+            left: -340px; /* Скрито извън екрана */
+            width: 320px;
+            height: 100%;
+            background-color: rgba(15, 23, 42, 0.95);
+            border-right: 2px solid rgba(61, 220, 132, 0.3);
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8);
+            z-index: 10005;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 30px 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar.open {
+            left: 0;
+        }
+
+        .sidebar h2 {
+            color: #ffffff;
+            margin-top: 0;
+            margin-bottom: 25px;
+            font-size: 1.6rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .channels-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding-right: 5px;
+        }
+
+        .channels-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .channels-list::-webkit-scrollbar-thumb {
+            background-color: rgba(61, 220, 132, 0.5);
+            border-radius: 3px;
+        }
+
+        /* STREAMING_CHUNK: Стилизиране на бутоните за канали */
+        .channel-btn {
+            background-color: rgba(30, 41, 59, 0.7);
+            color: #f1f5f9;
+            border: 2px solid transparent;
+            padding: 16px;
+            font-size: 1.15rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .channel-btn:hover, .channel-btn:focus {
+            background-color: #3ddc84;
+            color: #0f172a;
+            border-color: #ffffff;
+            padding-left: 24px;
+            outline: none;
+            box-shadow: 0 4px 12px rgba(61, 220, 132, 0.3);
+        }
+
+        /* STREAMING_CHUNK: Стилизиране на Toast известията */
+        .toast-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background-color: rgba(239, 68, 68, 0.95);
+            color: white;
+            padding: 14px 28px;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            z-index: 10010;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .toast-container.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- STREAMING_CHUNK: Интро Екран (Splash Screen) -->
+    <div class="splash-screen" id="splash-screen">
+        <!-- Векторно неоново лого на интелигентна телевизия -->
+        <svg class="splash-logo" viewBox="0 0 100 100" width="130" height="130">
+            <defs>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+            </defs>
+            <!-- Антени -->
+            <line x1="35" y1="20" x2="20" y2="5" stroke="#3ddc84" stroke-width="4" stroke-linecap="round"/>
+            <line x1="65" y1="20" x2="80" y2="5" stroke="#3ddc84" stroke-width="4" stroke-linecap="round"/>
+            <!-- Екран рамка -->
+            <rect x="10" y="20" width="80" height="55" rx="10" fill="none" stroke="#3ddc84" stroke-width="5" filter="url(#glow)"/>
+            <!-- Стойка -->
+            <path d="M 40 75 L 32 92 L 68 92 L 60 75 Z" fill="#0f172a" stroke="#3ddc84" stroke-width="4" stroke-linejoin="round"/>
+            <!-- Play символ в центъра -->
+            <polygon points="43,36 65,47.5 43,59" fill="#3ddc84" filter="url(#glow)"/>
+        </svg>
+        <div class="splash-title">МОЯТ ТВ ЦЕНТЪР</div>
+        <div class="splash-subtitle">18.07.2026 | P. Vladimirov </div>
+        <div class="spinner"></div>
+    </div>
+
+    <!-- STREAMING_CHUNK: Основна структура на контролите -->
+    <button class="menu-btn" id="toggle-menu-btn" tabindex="1">
+        <span>☰</span> Избор на Канал
+    </button>
+    
+    <div class="menu-trigger-zone" id="trigger-zone"></div>
+
+    <!-- Странично меню с обновени канали -->
+    <div class="sidebar" id="sidebar-menu">
+        <h2>Телевизия</h2>
+        <div class="channels-list">
+            <!-- Списък с канали -->
+            <button class="channel-btn" data-stream="https://i.cdn.bg/live/DUH6Ngk5qd">Bulgaria ON AIR</button>
+            <button class="channel-btn" data-stream="https://bss1.neterra.tv/magictv/magictv.m3u8">Magic TV</button>
+            <button class="channel-btn" data-stream="https://tv1.cloudcdn.bg/temp/livestream.m3u8">ТВ1</button>
+        </div>
+    </div>
+
+    <!-- Видео Плеър на цял екран -->
+    <div class="player-container">
+        <video 
+            id="tv-player" 
+            class="video-js vjs-default-skin vjs-big-play-centered" 
+            controls 
+            preload="auto" 
+            data-setup='{}'>
+        </video>
+    </div>
+
+    <!-- Контейнер за нативни известия -->
+    <div id="toast" class="toast-container">Грешка при зареждането на канала!</div>
+
+    <!-- STREAMING_CHUNK: Инициализиране на логиката и ефектите -->
+    <script src="https://vjs.zencdn.net/8.10.0/video.js"></script>
+    <script>
+        const player = videojs('tv-player');
+        const sidebar = document.getElementById('sidebar-menu');
+        const toggleBtn = document.getElementById('toggle-menu-btn');
+        const triggerZone = document.getElementById('trigger-zone');
+        const buttons = document.querySelectorAll('.channel-btn');
+        const toast = document.getElementById('toast');
+        const splashScreen = document.getElementById('splash-screen');
+
+        // Показване на персонализирано известие вместо браузърен alert
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3500);
+        }
+
+        function toggleMenu() { sidebar.classList.toggle('open'); }
+        function openMenu() { sidebar.classList.add('open'); }
+        function closeMenu() { sidebar.classList.remove('open'); }
+
+        toggleBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleMenu();
+        });
+
+        triggerZone.addEventListener('mouseenter', openMenu);
+        sidebar.addEventListener('mouseleave', closeMenu);
+
+        // Обработка при избор на канал
+        buttons.forEach(button => {
+            button.addEventListener('click', function() {
+                const streamUrl = this.getAttribute('data-stream');
+                const streamType = this.getAttribute('data-type') || 'application/x-mpegURL';
+                
+                if (streamUrl) {
+                    player.src({
+                        src: streamUrl,
+                        type: streamType
+                    });
+                    player.play();
+                    closeMenu();
+                    this.blur();
+                } else {
+                    showToast('Няма активен адрес за този канал!');
+                }
+            });
+        });
+
+        document.querySelector('.player-container').addEventListener('click', closeMenu);
+
+        // STREAMING_CHUNK: Управление на Splash екрана при зареждане
+        window.addEventListener('load', () => {
+            // Задържаме логото на екрана за 2.5 секунди за първокласен ефект
+            setTimeout(() => {
+                splashScreen.classList.add('fade-out');
+                
+                // Автоматично отваряне на страничното меню 0.8 секунди след скриването на логото
+                setTimeout(openMenu, 800);
+            }, 2500);
+        });
+    </script>
+</body>
+</html>
